@@ -88,6 +88,13 @@ const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ 
       
       if (foundUser) {
          onLogin(foundUser);
+        const allowed = await checkDeviceAccess(foundUser.username);
+
+if (!allowed) {
+  setError("تم إيقاف هذا الجهاز من لوحة التحكم");
+  setLoading(false);
+  return;
+}
       } else {
         setError('خطأ في اسم المستخدم أو كلمة المرور');
       }
