@@ -1,4 +1,3 @@
-// Import the functions you need from the SDKs you need
 import React, { useState, useEffect } from 'react';
 
 import { initializeApp } from "firebase/app";
@@ -6,7 +5,24 @@ import { getAnalytics } from "firebase/analytics";
 
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
-...const firebaseConfig = {
+
+import {
+  SalesModule,
+  PurchasesModule,
+  InventoryModule,
+  ExpensesModule,
+  FinanceModule,
+  PayrollModule,
+  ReportsModule,
+  SettingsModule,
+} from './components/Modules';
+
+import { AppRoute, User, UserRole, UserSession } from './types';
+import { ShieldCheck, User as UserIcon, Lock, AlertCircle } from 'lucide-react';
+
+/* ================= FIREBASE INIT ================= */
+
+const firebaseConfig = {
   apiKey: "...",
   authDomain: "...",
   projectId: "...",
@@ -15,30 +31,14 @@ import { Dashboard } from './components/Dashboard';
   appId: "...",
   measurementId: "..."
 };
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
 async function getUserIP() {
   const res = await fetch('https://api.ipify.org?format=json');
   const data = await res.json();
   return data.ip;
 }
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-import React, { useState, useEffect } from 'react';
-import { Layout } from './components/Layout';
-import { Dashboard } from './components/Dashboard';
-import { 
-  SalesModule, 
-  PurchasesModule, 
-  InventoryModule, 
-  ExpensesModule, 
-  FinanceModule, 
-  PayrollModule, 
-  ReportsModule, 
-  SettingsModule
-} from './components/Modules';
-import { AppRoute, User, UserRole, UserSession } from './types';
-import { ShieldCheck, User as UserIcon, Lock, AlertCircle } from 'lucide-react';
 
 // Login Component
 const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ onLogin, users }) => {
