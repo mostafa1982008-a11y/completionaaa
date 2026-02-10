@@ -1,3 +1,4 @@
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import React, { useState, useEffect } from 'react';
 
 import { initializeApp } from "firebase/app";
