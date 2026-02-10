@@ -41,6 +41,33 @@ async function getUserIP() {
   return data.ip;
 }
 
+async function checkDeviceAccess(userName: string) {
+  const ip = await getUserIP();
+
+  const safeId = ip.replace(/\./g, "_");
+
+  const ref = doc(db, "devices", safeId);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      user: userName,
+      ip,
+      active: true,
+      createdAt: serverTimestamp(),
+    });
+
+    return true;
+  }
+
+  const data = snap.data();
+
+  if (data.active === false) {
+    return false;
+  }
+
+  return true;
+}
 // Login Component
 const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ onLogin, users }) => {
   const [username, setUsername] = useState('');
@@ -136,13 +163,14 @@ const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ 
               ) : (
                 <>
                   <ShieldCheck size={20} />
-                  <span>دخول آمن</span>
+                  <span>دخول </span>
                 </>
               )}
             </button>
             
             <p className="text-center text-sm text-gray-400 mt-4">
-               تواصل مع الإدارة للحصول على بيانات الدخول
+        01556552188
+              تواصل مع الإدارة للحصول على بيانات الدخول
             </p>
           </form>
         </div>
