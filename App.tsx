@@ -125,8 +125,20 @@ const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ 
 };
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Session Persistence: Initialize from localStorage to survive refreshes
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const savedSession = localStorage.getItem('active_session_user');
+      return savedSession ? JSON.parse(savedSession) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return !!localStorage.getItem('active_session_user');
+  });
+
   const [activeRoute, setActiveRoute] = useState<AppRoute>(AppRoute.DASHBOARD);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [language, setLanguage] = useState<'ar' | 'en'>('ar');
@@ -149,6 +161,15 @@ const App: React.FC = () => {
     localStorage.setItem('app_users_v3', JSON.stringify(users));
   }, [users]);
 
+  // Persist Active Session
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('active_session_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('active_session_user');
+    }
+  }, [currentUser]);
+
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -161,7 +182,7 @@ const App: React.FC = () => {
     setCurrentUser(user);
     setIsAuthenticated(true);
     
-    // Record Session
+    // Record Session History
     const newSession: UserSession = {
         id: Date.now().toString(),
         userId: user.id,
@@ -179,6 +200,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setCurrentUser(null);
+    localStorage.removeItem('active_session_user');
   };
 
   const handleCreateUser = (newUser: User) => {
@@ -240,7 +262,7 @@ const App: React.FC = () => {
         return <FinanceModule user={currentUser} />;
       case AppRoute.PAYROLL:
         return <PayrollModule 
-            onCreateUser={() => {}} // Not used here anymore for login users
+            onCreateUser={() => {}} 
             onUpdateUser={() => {}}
             onDeleteUser={() => {}}
             user={currentUser} 

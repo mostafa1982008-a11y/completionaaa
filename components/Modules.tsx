@@ -17,13 +17,38 @@ export interface SettingsModuleProps {
 // --- Helper Functions ---
 const usePersistentState = <T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
   const [state, setState] = useState<T>(() => {
-    const saved = localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : initialValue;
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : initialValue;
+    } catch (e) {
+      console.error("Error loading state from localStorage", e);
+      return initialValue;
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem(key, JSON.stringify(state));
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch (e) {
+      console.error("Error saving state to localStorage (Quota exceeded?)", e);
+    }
   }, [key, state]);
+
+  // Sync state across multiple tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === key && e.newValue) {
+        try {
+          setState(JSON.parse(e.newValue));
+        } catch (error) {
+          console.error("Error syncing state", error);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [key]);
 
   return [state, setState];
 };
@@ -361,7 +386,6 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
 );
 
 // --- SALES MODULE ---
-// ... (SalesModule remains unchanged)
 interface SalesLineItem {
     id: string;
     itemId: string;
@@ -801,7 +825,6 @@ export const PurchasesModule: React.FC<{user: User | null}> = ({user}) => {
 };
 
 // --- INVENTORY MODULE ---
-// ... (InventoryModule remains unchanged)
 export const InventoryModule: React.FC<{user: User | null}> = ({user}) => {
     const [inventory, setInventory] = usePersistentState<InventoryItem[]>('inventory_data_v3', []);
     const [transfers, setTransfers] = usePersistentState<StockTransfer[]>('stock_transfers_v3', []);
@@ -1083,7 +1106,6 @@ export const InventoryModule: React.FC<{user: User | null}> = ({user}) => {
 };
 
 // --- EXPENSES MODULE ---
-// ... (ExpensesModule remains unchanged)
 export const ExpensesModule: React.FC<{user: User | null}> = ({user}) => {
     const [expenses, setExpenses] = usePersistentState<Expense[]>('expenses_data_v3', []);
     const [showModal, setShowModal] = useState(false);
@@ -1138,7 +1160,6 @@ export const ExpensesModule: React.FC<{user: User | null}> = ({user}) => {
 };
 
 // --- FINANCE MODULE ---
-// ... (FinanceModule remains unchanged)
 export const FinanceModule: React.FC<{user: User | null}> = ({user}) => {
     const [invoices] = usePersistentState<Invoice[]>('invoices_data_v3', []);
     const [expenses] = usePersistentState<Expense[]>('expenses_data_v3', []);
@@ -1247,7 +1268,6 @@ export const PayrollModule: React.FC<PayrollProps> = ({user}) => {
 };
 
 // --- REPORTS MODULE ---
-// ... (ReportsModule remains unchanged)
 export const ReportsModule: React.FC<{user: User | null}> = ({user}) => {
     return (
         <div className="space-y-6">
@@ -1274,7 +1294,6 @@ export const ReportsModule: React.FC<{user: User | null}> = ({user}) => {
 };
 
 // --- SETTINGS MODULE ---
-// ... (SettingsModule remains largely unchanged but checking delete logic)
 export const SettingsModule: React.FC<SettingsModuleProps> = ({ toggleTheme, toggleLanguage, theme, language, user, allUsers, onCreateUser, onUpdateUser, onDeleteUser }) => {
     const [settings, setSettings] = usePersistentState<CompanySettings>('company_settings_v3', {
         name: 'إنجاز للحلول',
