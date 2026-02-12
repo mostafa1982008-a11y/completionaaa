@@ -1,73 +1,19 @@
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import React, { useState, useEffect } from 'react';
-
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
-
-import {
-  SalesModule,
-  PurchasesModule,
-  InventoryModule,
-  ExpensesModule,
-  FinanceModule,
-  PayrollModule,
-  ReportsModule,
-  SettingsModule,
+import { 
+  SalesModule, 
+  PurchasesModule, 
+  InventoryModule, 
+  ExpensesModule, 
+  FinanceModule, 
+  PayrollModule, 
+  ReportsModule, 
+  SettingsModule
 } from './components/Modules';
-
 import { AppRoute, User, UserRole, UserSession } from './types';
 import { ShieldCheck, User as UserIcon, Lock, AlertCircle } from 'lucide-react';
 
-/* ================= FIREBASE INIT ================= */
-
-const firebaseConfig = {
-  apiKey: "...",
-  authDomain: "...",
-  projectId: "...",
-  storageBucket: "...",
-  messagingSenderId: "...",
-  appId: "...",
-  measurementId: "..."
-};
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const db = getFirestore(app);
-async function getUserIP() {
-  const res = await fetch('https://api.ipify.org?format=json');
-  const data = await res.json();
-  return data.ip;
-}
-
-async function checkDeviceAccess(userName: string) {
-  const ip = await getUserIP();
-
-  const safeId = ip.replace(/\./g, "_");
-
-  const ref = doc(db, "devices", safeId);
-  const snap = await getDoc(ref);
-
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      user: userName,
-      ip,
-      active: true,
-      createdAt: serverTimestamp(),
-    });
-
-    return true;
-  }
-
-  const data = snap.data();
-
-  if (data.active === false) {
-    return false;
-  }
-
-  return true;
-}
 // Login Component
 const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ onLogin, users }) => {
   const [username, setUsername] = useState('');
@@ -75,7 +21,7 @@ const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -88,13 +34,6 @@ const LoginScreen: React.FC<{ onLogin: (u: User) => void, users: User[] }> = ({ 
       
       if (foundUser) {
          onLogin(foundUser);
-        const allowed = await checkDeviceAccess(foundUser.username);
-
-if (!allowed) {
-  setError("تم إيقاف هذا الجهاز من لوحة التحكم");
-  setLoading(false);
-  return;
-}
       } else {
         setError('خطأ في اسم المستخدم أو كلمة المرور');
       }
@@ -170,14 +109,13 @@ if (!allowed) {
               ) : (
                 <>
                   <ShieldCheck size={20} />
-                  <span>دخول </span>
+                  <span>دخول آمن</span>
                 </>
               )}
             </button>
             
             <p className="text-center text-sm text-gray-400 mt-4">
-        01556552188
-              تواصل مع الإدارة للحصول على بيانات الدخول
+               تواصل مع الإدارة للحصول على بيانات الدخول
             </p>
           </form>
         </div>

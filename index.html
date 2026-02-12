@@ -1,11 +1,26 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Engaz Accounting System</title>
+    <title>إنجاز - Engaz Accounting System</title>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons: Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Charts: Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Barcode: JsBarcode -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+    <!-- Tailwind Config -->
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -19,40 +34,762 @@
         }
       }
     </script>
-    <style>
-      body {
-        font-family: 'Cairo', sans-serif;
-      }
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
-      }
-    </style>
-  <script type="importmap">
+
+    <!-- Import Map for GenAI -->
+    <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
     "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
     "recharts": "https://esm.sh/recharts@^3.7.0"
   }
 }
 </script>
+
+    <style>
+      body { font-family: 'Cairo', sans-serif; }
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      .fade-in { animation: fadeIn 0.3s ease-in-out; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .hidden { display: none !important; }
+    </style>
 </head>
-  <body class="bg-gray-50 text-slate-900 dark:bg-slate-900 dark:text-gray-100">
-    <div id="root"></div>
-  </body>
+<body class="bg-gray-50 text-slate-900 dark:bg-slate-900 dark:text-gray-100 transition-colors duration-200">
+
+    <div id="root">
+        <!-- Application Content will be injected here via JavaScript -->
+    </div>
+
+    <script type="module">
+        import { GoogleGenAI } from "@google/genai";
+
+        // --- STATE MANAGEMENT ---
+        const state = {
+            currentUser: null,
+            activeRoute: 'DASHBOARD',
+            theme: localStorage.getItem('theme') || 'light',
+            language: 'ar',
+            users: JSON.parse(localStorage.getItem('app_users_v3')) || [
+                { id: 'super-admin-01', username: 'admin', password: 'admin', name: 'المدير العام (Admin)', role: 'OWNER' }
+            ],
+            // Data Caches
+            invoices: JSON.parse(localStorage.getItem('invoices_data_v3')) || [],
+            inventory: JSON.parse(localStorage.getItem('inventory_data_v3')) || [],
+            suppliers: JSON.parse(localStorage.getItem('suppliers_data_v3')) || [],
+            payments: JSON.parse(localStorage.getItem('supplier_payment_history_v3')) || [],
+            employees: JSON.parse(localStorage.getItem('employees_data_v3')) || [],
+            expenses: JSON.parse(localStorage.getItem('expenses_data_v3')) || [],
+            settings: JSON.parse(localStorage.getItem('company_settings_v3')) || {
+                name: 'إنجاز للحلول',
+                currency: 'EGP',
+                receiptConfig: { showLogo: false, footerText: 'شكراً لتعاملكم معنا' }
+            }
+        };
+
+        // --- PERSISTENCE HELPERS ---
+        const saveData = (key, data) => {
+            localStorage.setItem(key, JSON.stringify(data));
+            // Update local state reference mapping
+            if (key === 'invoices_data_v3') state.invoices = data;
+            if (key === 'inventory_data_v3') state.inventory = data;
+            if (key === 'suppliers_data_v3') state.suppliers = data;
+            if (key === 'supplier_payment_history_v3') state.payments = data;
+            if (key === 'employees_data_v3') state.employees = data;
+            if (key === 'expenses_data_v3') state.expenses = data;
+            if (key === 'app_users_v3') state.users = data;
+            if (key === 'company_settings_v3') state.settings = data;
+        };
+
+        // --- RENDER ENGINE ---
+        const root = document.getElementById('root');
+
+        // Main Render Function
+        function renderApp() {
+            root.innerHTML = '';
+            
+            // Apply Theme
+            if (state.theme === 'dark') document.documentElement.classList.add('dark');
+            else document.documentElement.classList.remove('dark');
+
+            if (!state.currentUser) {
+                renderLogin();
+            } else {
+                renderLayout();
+                renderActiveModule();
+            }
+            lucide.createIcons();
+        }
+
+        // --- LOGIN MODULE ---
+        function renderLogin() {
+            root.innerHTML = `
+                <div class="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center fade-in">
+                        <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 text-white text-3xl font-bold">E</div>
+                        <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-6">تسجيل الدخول</h2>
+                        <form id="login-form" class="space-y-4 text-right">
+                            <div>
+                                <label class="block text-sm text-gray-500 mb-1">اسم المستخدم</label>
+                                <input type="text" id="username" class="w-full p-3 border rounded-lg dark:bg-slate-700 dark:text-white dark:border-slate-600" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-500 mb-1">كلمة المرور</label>
+                                <input type="password" id="password" class="w-full p-3 border rounded-lg dark:bg-slate-700 dark:text-white dark:border-slate-600" required>
+                            </div>
+                            <button type="submit" class="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors">دخول آمن</button>
+                            <p id="login-error" class="text-red-500 text-sm hidden flex items-center gap-2 justify-center"><i data-lucide="alert-circle" width="16"></i> خطأ في البيانات</p>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('login-form').onsubmit = (e) => {
+                e.preventDefault();
+                const u = document.getElementById('username').value;
+                const p = document.getElementById('password').value;
+                
+                const user = state.users.find(usr => usr.username === u && usr.password === p);
+                if (user) {
+                    state.currentUser = user;
+                    // Record Session
+                    const sessions = JSON.parse(localStorage.getItem('user_sessions_v3') || '[]');
+                    sessions.unshift({ id: Date.now(), userId: user.id, time: new Date().toISOString() });
+                    localStorage.setItem('user_sessions_v3', JSON.stringify(sessions.slice(0, 50)));
+                    renderApp();
+                } else {
+                    document.getElementById('login-error').classList.remove('hidden');
+                    lucide.createIcons();
+                }
+            };
+        }
+
+        // --- LAYOUT MODULE ---
+        function renderLayout() {
+            const layoutHTML = `
+                <div class="flex h-screen bg-gray-50 dark:bg-slate-900 overflow-hidden" dir="${state.language === 'ar' ? 'rtl' : 'ltr'}">
+                    <!-- Sidebar -->
+                    <aside class="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-20 transition-all">
+                        <div class="h-16 flex items-center gap-2 px-4 bg-slate-950 font-bold text-xl tracking-wide">
+                            <div class="w-8 h-8 rounded bg-blue-500 flex items-center justify-center">E</div>
+                            <span>إنجاز</span>
+                        </div>
+                        <nav class="flex-1 overflow-y-auto py-4 px-2 space-y-1" id="nav-container"></nav>
+                        <div class="p-4 border-t border-slate-800 flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-lg">${state.currentUser.name.charAt(0)}</div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium truncate">${state.currentUser.name}</p>
+                                <p class="text-xs text-slate-400 truncate">${state.currentUser.role}</p>
+                            </div>
+                            <button id="logout-btn" class="text-slate-400 hover:text-red-400"><i data-lucide="log-out"></i></button>
+                        </div>
+                    </aside>
+
+                    <!-- Main Content -->
+                    <div class="flex-1 flex flex-col min-w-0">
+                        <header class="h-16 bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 z-10">
+                            <h2 class="text-lg font-bold text-gray-800 dark:text-white" id="page-title"></h2>
+                            <div class="flex items-center gap-3">
+                                <button id="theme-btn" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500">
+                                    <i data-lucide="${state.theme === 'dark' ? 'sun' : 'moon'}"></i>
+                                </button>
+                            </div>
+                        </header>
+                        <main class="flex-1 overflow-auto p-6 relative fade-in" id="main-view"></main>
+                    </div>
+                </div>
+            `;
+            root.innerHTML = layoutHTML;
+
+            // Render Navigation
+            const menuItems = [
+                { id: 'DASHBOARD', label: 'لوحة القيادة', icon: 'layout-dashboard' },
+                { id: 'SALES', label: 'المبيعات', icon: 'shopping-cart' },
+                { id: 'PURCHASES', label: 'المشتريات', icon: 'shopping-bag' },
+                { id: 'INVENTORY', label: 'المخزون', icon: 'package' },
+                { id: 'EXPENSES', label: 'المصروفات', icon: 'wallet' },
+                { id: 'PAYROLL', label: 'شؤون الموظفين', icon: 'users' },
+                { id: 'SETTINGS', label: 'الإعدادات', icon: 'settings' },
+            ];
+
+            const navContainer = document.getElementById('nav-container');
+            menuItems.forEach(item => {
+                // Permission Check
+                if (state.currentUser.role !== 'OWNER' && item.id !== 'DASHBOARD' && !state.currentUser.permissions?.includes(item.id)) return;
+
+                const btn = document.createElement('button');
+                btn.className = `w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors duration-200 ${state.activeRoute === item.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`;
+                btn.innerHTML = `<i data-lucide="${item.icon}" width="20"></i> <span class="text-sm font-medium">${item.label}</span>`;
+                btn.onclick = () => {
+                    state.activeRoute = item.id;
+                    renderApp();
+                };
+                navContainer.appendChild(btn);
+            });
+
+            // Event Listeners
+            document.getElementById('logout-btn').onclick = () => {
+                state.currentUser = null;
+                renderApp();
+            };
+            document.getElementById('theme-btn').onclick = () => {
+                state.theme = state.theme === 'light' ? 'dark' : 'light';
+                localStorage.setItem('theme', state.theme);
+                renderApp();
+            };
+        }
+
+        // --- DASHBOARD MODULE ---
+        function renderActiveModule() {
+            const container = document.getElementById('main-view');
+            const titleEl = document.getElementById('page-title');
+            
+            switch(state.activeRoute) {
+                case 'DASHBOARD': titleEl.innerText = 'لوحة القيادة'; renderDashboard(container); break;
+                case 'SALES': titleEl.innerText = 'إدارة المبيعات'; renderSales(container); break;
+                case 'PURCHASES': titleEl.innerText = 'الموردين والمشتريات'; renderPurchases(container); break;
+                case 'INVENTORY': titleEl.innerText = 'المخزون'; renderInventory(container); break;
+                case 'EXPENSES': titleEl.innerText = 'المصروفات'; renderExpenses(container); break;
+                case 'PAYROLL': titleEl.innerText = 'شؤون الموظفين'; renderPayroll(container); break;
+                case 'SETTINGS': titleEl.innerText = 'الإعدادات والمستخدمين'; renderSettings(container); break;
+            }
+            lucide.createIcons();
+        }
+
+        function renderDashboard(container) {
+            const totalSales = state.invoices.reduce((a, b) => a + b.amount, 0);
+            const totalExp = state.expenses.reduce((a, b) => a + b.amount, 0);
+            
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <div class="flex justify-between mb-4"><div class="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600"><i data-lucide="dollar-sign"></i></div></div>
+                        <p class="text-gray-500 text-sm">المبيعات</p>
+                        <h3 class="text-2xl font-bold dark:text-white">${totalSales.toLocaleString()} ج.م</h3>
+                    </div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <div class="flex justify-between mb-4"><div class="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600"><i data-lucide="trending-down"></i></div></div>
+                        <p class="text-gray-500 text-sm">المصروفات</p>
+                        <h3 class="text-2xl font-bold dark:text-white">${totalExp.toLocaleString()} ج.م</h3>
+                    </div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <div class="flex justify-between mb-4"><div class="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600"><i data-lucide="trending-up"></i></div></div>
+                        <p class="text-gray-500 text-sm">صافي الربح</p>
+                        <h3 class="text-2xl font-bold text-green-600">${(totalSales - totalExp).toLocaleString()} ج.م</h3>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <h3 class="font-bold mb-4 dark:text-white">الأداء المالي</h3>
+                        <div class="h-64 relative w-full"><canvas id="financeChart"></canvas></div>
+                    </div>
+                    
+                    ${(state.currentUser.role === 'OWNER' || state.currentUser.role === 'ADMIN') ? `
+                    <div class="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-xl text-white shadow-lg relative overflow-hidden">
+                        <div class="relative z-10">
+                            <div class="flex items-center gap-2 mb-4">
+                                <i data-lucide="sparkles" class="text-yellow-300"></i>
+                                <h3 class="font-bold">المستشار الذكي (AI)</h3>
+                            </div>
+                            <p id="ai-result" class="text-indigo-100 text-sm mb-4 min-h-[60px]">اضغط للتحليل...</p>
+                            <button id="ai-btn" class="w-full bg-white/20 hover:bg-white/30 py-2 rounded-lg text-sm transition-colors">تحليل البيانات</button>
+                        </div>
+                    </div>` : ''}
+                </div>
+            `;
+
+            // Chart Initialization
+            setTimeout(() => {
+                const ctx = document.getElementById('financeChart');
+                if (ctx) {
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
+                            datasets: [{
+                                label: 'المبيعات',
+                                data: [12000, 19000, 3000, 5000, 2000, totalSales],
+                                borderColor: '#2563eb',
+                                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false }
+                    });
+                }
+            }, 100);
+
+            // AI Logic
+            const aiBtn = document.getElementById('ai-btn');
+            if (aiBtn) {
+                aiBtn.onclick = async () => {
+                    aiBtn.innerText = 'جاري التحليل...';
+                    aiBtn.disabled = true;
+                    try {
+                        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+                        const prompt = `Analyze: Sales ${totalSales}, Expenses ${totalExp}. Give advice in Arabic.`;
+                        const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
+                        document.getElementById('ai-result').innerText = response.text || "تحليل جاهز.";
+                    } catch (e) {
+                        document.getElementById('ai-result').innerText = "عذراً، يجب تكوين API Key.";
+                    }
+                    aiBtn.innerText = 'تحليل البيانات';
+                    aiBtn.disabled = false;
+                };
+            }
+        }
+
+        // --- SALES MODULE ---
+        function renderSales(container) {
+            // Temporary state for this render cycle
+            let currentLineItems = []; 
+            
+            const renderTable = () => {
+                const rows = state.invoices.map(inv => `
+                    <tr class="border-b dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">
+                        <td class="p-4">${inv.number}</td>
+                        <td class="p-4 font-bold">${inv.customerName}</td>
+                        <td class="p-4">${(inv.amount + (inv.lateFees || 0)).toLocaleString()}</td>
+                        <td class="p-4"><span class="px-2 py-1 rounded text-xs ${inv.status === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${inv.status === 'PAID' ? 'مدفوع' : 'معلق'}</span></td>
+                        <td class="p-4 flex gap-2">
+                             <button onclick="window.printInvoice('${inv.id}')" class="text-blue-600"><i data-lucide="printer" width="18"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+                return rows || `<tr><td colspan="5" class="p-8 text-center text-gray-400">لا توجد فواتير</td></tr>`;
+            };
+
+            container.innerHTML = `
+                <div class="mb-6 flex justify-between">
+                    <button id="new-inv-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"><i data-lucide="plus"></i> فاتورة جديدة</button>
+                    <button onclick="exportToCSV(state.invoices, 'sales')" class="bg-white dark:bg-slate-800 border dark:border-slate-700 px-4 py-2 rounded-lg flex items-center gap-2"><i data-lucide="file-spreadsheet"></i> تصدير</button>
+                </div>
+                
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden border border-gray-100 dark:border-slate-700">
+                    <table class="w-full text-right">
+                        <thead class="bg-gray-50 dark:bg-slate-900/50 text-gray-500 text-sm">
+                            <tr><th class="p-4">رقم الفاتورة</th><th class="p-4">العميل</th><th class="p-4">المبلغ</th><th class="p-4">الحالة</th><th class="p-4">إجراءات</th></tr>
+                        </thead>
+                        <tbody class="dark:text-gray-300" id="sales-table-body">${renderTable()}</tbody>
+                    </table>
+                </div>
+
+                <!-- Modal Overlay -->
+                <div id="inv-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+                    <div class="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-2xl shadow-2xl animate-in zoom-in duration-200">
+                        <div class="flex justify-between mb-4">
+                            <h3 class="text-xl font-bold dark:text-white">فاتورة مبيعات جديدة</h3>
+                            <button id="close-modal" class="text-gray-400 hover:text-red-500"><i data-lucide="x"></i></button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <input id="inv-customer" placeholder="اسم العميل" class="p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white" />
+                            <input type="date" id="inv-date" value="${new Date().toISOString().split('T')[0]}" class="p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white" />
+                        </div>
+                        
+                        <div class="bg-gray-50 dark:bg-slate-900 p-4 rounded-lg border dark:border-slate-700 mb-4">
+                            <div class="flex gap-2 mb-2 items-end">
+                                <div class="flex-1">
+                                    <label class="text-xs text-gray-500 block mb-1">الصنف</label>
+                                    <select id="inv-item" class="w-full p-2 border rounded dark:bg-slate-800 dark:border-slate-600 dark:text-white">
+                                        <option value="">اختر...</option>
+                                        ${state.inventory.map(i => `<option value="${i.id}" data-price="${i.unitPrice}">${i.name} (${i.unitPrice})</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="w-24">
+                                    <label class="text-xs text-gray-500 block mb-1">الكمية</label>
+                                    <input type="number" id="inv-qty" value="1" class="w-full p-2 border rounded dark:bg-slate-800 dark:border-slate-600 dark:text-white">
+                                </div>
+                                <button id="add-line-btn" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">إضافة</button>
+                            </div>
+                            <ul id="line-items" class="text-sm space-y-2 max-h-32 overflow-y-auto"></ul>
+                        </div>
+
+                        <div class="flex justify-between items-center border-t dark:border-slate-700 pt-4">
+                            <div>
+                                <label class="text-xs text-gray-500 block">رسوم إضافية</label>
+                                <input type="number" id="inv-fees" value="0" class="w-24 p-1 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white text-sm">
+                            </div>
+                            <div class="text-xl font-bold dark:text-white" id="inv-total">الإجمالي: 0.00</div>
+                        </div>
+
+                        <button id="save-inv-btn" class="w-full mt-4 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700">حفظ الفاتورة</button>
+                    </div>
+                </div>
+            `;
+
+            // Modal Logic
+            const modal = document.getElementById('inv-modal');
+            const linesList = document.getElementById('line-items');
+            
+            const updateUI = () => {
+                linesList.innerHTML = currentLineItems.map((item, idx) => `
+                    <li class="flex justify-between items-center dark:text-gray-300 bg-white dark:bg-slate-800 p-2 rounded border dark:border-slate-700">
+                        <span>${item.name} x${item.qty}</span>
+                        <span class="font-bold">${item.total.toLocaleString()}</span>
+                        <button onclick="window.removeLine(${idx})" class="text-red-500"><i data-lucide="trash-2" width="14"></i></button>
+                    </li>
+                `).join('');
+                
+                const fees = Number(document.getElementById('inv-fees').value) || 0;
+                const total = currentLineItems.reduce((acc, i) => acc + i.total, 0) + fees;
+                document.getElementById('inv-total').innerText = `الإجمالي: ${total.toLocaleString()}`;
+                lucide.createIcons();
+            };
+
+            document.getElementById('new-inv-btn').onclick = () => modal.classList.remove('hidden');
+            document.getElementById('close-modal').onclick = () => { modal.classList.add('hidden'); currentLineItems = []; updateUI(); };
+            
+            document.getElementById('add-line-btn').onclick = () => {
+                const select = document.getElementById('inv-item');
+                const qty = Number(document.getElementById('inv-qty').value);
+                if (!select.value || qty <= 0) return;
+                
+                const item = state.inventory.find(i => i.id === select.value);
+                currentLineItems.push({ id: item.id, name: item.name, qty, total: item.unitPrice * qty });
+                updateUI();
+            };
+
+            document.getElementById('inv-fees').oninput = updateUI;
+
+            document.getElementById('save-inv-btn').onclick = () => {
+                if (currentLineItems.length === 0) return alert('أضف أصناف');
+                const fees = Number(document.getElementById('inv-fees').value);
+                const total = currentLineItems.reduce((acc, i) => acc + i.total, 0);
+                
+                const invoice = {
+                    id: Date.now().toString(),
+                    number: `INV-${Date.now()}`,
+                    customerName: document.getElementById('inv-customer').value || 'نقدي',
+                    date: document.getElementById('inv-date').value,
+                    amount: total,
+                    lateFees: fees,
+                    status: 'PENDING',
+                    items: currentLineItems.length
+                };
+
+                state.invoices.unshift(invoice);
+                saveData('invoices_data_v3', state.invoices);
+                modal.classList.add('hidden');
+                renderSales(container);
+            };
+
+            // Global helpers
+            window.removeLine = (idx) => { currentLineItems.splice(idx, 1); updateUI(); };
+            window.printInvoice = (id) => alert(`Printing Invoice ${id}... (Feature Mock)`);
+            window.exportToCSV = (data, name) => {
+                 // Simple CSV logic
+                 const header = Object.keys(data[0]||{}).join(',');
+                 const rows = data.map(o => Object.values(o).join(',')).join('\n');
+                 const blob = new Blob([header + '\n' + rows], { type: 'text/csv' });
+                 const url = URL.createObjectURL(blob);
+                 const a = document.createElement('a'); a.href = url; a.download = name + '.csv'; a.click();
+            };
+        }
+
+        // --- PURCHASES MODULE (WITH PREVIOUS BALANCE & PAYMENT HISTORY) ---
+        function renderPurchases(container) {
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Add Supplier -->
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <h3 class="font-bold mb-4 dark:text-white flex items-center gap-2"><i data-lucide="user-plus"></i> إضافة مورد</h3>
+                        <div class="space-y-3">
+                            <input id="sup-name" placeholder="اسم المورد" class="w-full p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white">
+                            <input id="sup-contact" placeholder="رقم الهاتف" class="w-full p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white">
+                            <input id="sup-balance" type="number" placeholder="الرصيد الافتتاحي" class="w-full p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white">
+                            <button id="save-sup" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">حفظ المورد</button>
+                        </div>
+                    </div>
+
+                    <!-- Add Payment (Updated) -->
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <h3 class="font-bold mb-4 dark:text-white flex items-center gap-2"><i data-lucide="credit-card"></i> تسجيل دفعة</h3>
+                        <div class="space-y-3">
+                            <select id="pay-sup" class="w-full p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white">
+                                <option value="">اختر المورد...</option>
+                                ${state.suppliers.map(s => `<option value="${s.id}">${s.name} (مديونية: ${s.balance})</option>`).join('')}
+                            </select>
+                            <input id="pay-amount" type="number" placeholder="المبلغ" class="w-full p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white">
+                            <input id="pay-date" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full p-2 border rounded dark:bg-slate-900 dark:border-slate-700 dark:text-white">
+                            <button id="save-pay" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">تسجيل العملية</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 p-6">
+                    <h3 class="font-bold mb-4 dark:text-white">سجل المدفوعات (Supplier Payment History)</h3>
+                    <div class="overflow-x-auto">
+                         <table class="w-full text-right">
+                            <thead class="bg-gray-50 dark:bg-slate-900 text-sm text-gray-500">
+                                <tr><th>التاريخ</th><th>المورد</th><th>المبلغ</th><th>الرصيد السابق</th><th>طريقة الدفع</th></tr>
+                            </thead>
+                            <tbody class="dark:text-gray-300">
+                                ${state.payments.map(p => `
+                                    <tr class="border-b dark:border-slate-700">
+                                        <td class="p-3">${p.date}</td>
+                                        <td class="p-3">${p.supplierName}</td>
+                                        <td class="p-3 font-bold text-green-600">${p.amount}</td>
+                                        <td class="p-3 text-gray-500">${p.previousBalance ?? '-'}</td>
+                                        <td class="p-3 text-xs">${p.method}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                         </table>
+                    </div>
+                </div>
+            `;
+
+            // Logic
+            document.getElementById('save-sup').onclick = () => {
+                const name = document.getElementById('sup-name').value;
+                if(!name) return;
+                state.suppliers.push({
+                    id: Date.now().toString(),
+                    name,
+                    contact: document.getElementById('sup-contact').value,
+                    balance: Number(document.getElementById('sup-balance').value) || 0
+                });
+                saveData('suppliers_data_v3', state.suppliers);
+                renderPurchases(container);
+            };
+
+            document.getElementById('save-pay').onclick = () => {
+                const supId = document.getElementById('pay-sup').value;
+                const amount = Number(document.getElementById('pay-amount').value);
+                if (!supId || amount <= 0) return;
+
+                const supplier = state.suppliers.find(s => s.id === supId);
+                const previousBalance = supplier.balance; // Capture snapshot
+
+                const payment = {
+                    id: Date.now().toString(),
+                    supplierId: supplier.id,
+                    supplierName: supplier.name,
+                    date: document.getElementById('pay-date').value,
+                    amount,
+                    previousBalance, // Stored as requested
+                    type: 'PAYMENT',
+                    method: 'CASH'
+                };
+
+                // Update supplier balance
+                supplier.balance -= amount;
+
+                state.payments.unshift(payment);
+                saveData('supplier_payment_history_v3', state.payments);
+                saveData('suppliers_data_v3', state.suppliers);
+                renderPurchases(container);
+            };
+        }
+
+        // --- INVENTORY MODULE ---
+        function renderInventory(container) {
+             container.innerHTML = `
+                <div class="flex justify-between mb-4">
+                    <button id="toggle-add-item" class="bg-blue-600 text-white px-4 py-2 rounded-lg">إضافة صنف</button>
+                </div>
+                
+                <div id="add-item-form" class="hidden bg-white dark:bg-slate-800 p-4 rounded-lg mb-4 border dark:border-slate-700 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <input id="item-name" placeholder="اسم الصنف" class="p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <input id="item-price" type="number" placeholder="السعر" class="p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <input id="item-qty" type="number" placeholder="الكمية" class="p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <button id="save-item" class="bg-green-600 text-white rounded">حفظ</button>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                    <table class="w-full text-right">
+                        <thead class="bg-gray-50 dark:bg-slate-900 text-sm text-gray-500"><tr><th class="p-3">الاسم</th><th class="p-3">السعر</th><th class="p-3">الكمية</th></tr></thead>
+                        <tbody class="dark:text-gray-300">
+                             ${state.inventory.map(i => `<tr class="border-b dark:border-slate-700"><td class="p-3">${i.name}</td><td class="p-3">${i.unitPrice}</td><td class="p-3">${i.quantity}</td></tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+             `;
+             
+             document.getElementById('toggle-add-item').onclick = () => document.getElementById('add-item-form').classList.toggle('hidden');
+             document.getElementById('save-item').onclick = () => {
+                 const name = document.getElementById('item-name').value;
+                 if(!name) return;
+                 state.inventory.push({
+                     id: Date.now().toString(),
+                     name,
+                     unitPrice: Number(document.getElementById('item-price').value),
+                     quantity: Number(document.getElementById('item-qty').value),
+                     reorderLevel: 5
+                 });
+                 saveData('inventory_data_v3', state.inventory);
+                 renderInventory(container);
+             };
+        }
+
+        // --- EXPENSES MODULE ---
+        function renderExpenses(container) {
+            container.innerHTML = `
+                 <div class="flex gap-4 mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg border dark:border-slate-700">
+                    <input id="exp-desc" placeholder="وصف المصروف" class="flex-1 p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <input id="exp-amount" type="number" placeholder="المبلغ" class="w-32 p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <button id="save-exp" class="bg-red-600 text-white px-6 rounded">تسجيل</button>
+                 </div>
+                 <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+                    <table class="w-full text-right">
+                        <thead class="bg-gray-50 dark:bg-slate-900 text-sm text-gray-500"><tr><th class="p-3">الوصف</th><th class="p-3">المبلغ</th><th class="p-3">التاريخ</th></tr></thead>
+                        <tbody class="dark:text-gray-300">
+                            ${state.expenses.map(e => `<tr><td class="p-3">${e.description}</td><td class="p-3 font-bold text-red-600">${e.amount}</td><td class="p-3 text-sm text-gray-500">${e.date}</td></tr>`).join('')}
+                        </tbody>
+                    </table>
+                 </div>
+            `;
+            document.getElementById('save-exp').onclick = () => {
+                const desc = document.getElementById('exp-desc').value;
+                const amt = Number(document.getElementById('exp-amount').value);
+                if(!desc || amt <= 0) return;
+                state.expenses.unshift({id: Date.now().toString(), description: desc, amount: amt, date: new Date().toISOString().split('T')[0]});
+                saveData('expenses_data_v3', state.expenses);
+                renderExpenses(container);
+            };
+        }
+
+        // --- PAYROLL MODULE (WITH DELETE) ---
+        function renderPayroll(container) {
+            container.innerHTML = `
+                <div class="flex gap-2 mb-6 bg-white dark:bg-slate-800 p-4 rounded-lg border dark:border-slate-700">
+                    <input id="emp-name" placeholder="اسم الموظف" class="flex-1 p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <input id="emp-pos" placeholder="المنصب" class="flex-1 p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <input id="emp-sal" type="number" placeholder="الراتب" class="w-32 p-2 border rounded dark:bg-slate-700 dark:text-white">
+                    <button id="save-emp" class="bg-blue-600 text-white px-4 rounded">إضافة</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    ${state.employees.map(emp => `
+                        <div class="bg-white dark:bg-slate-800 p-4 rounded-lg border dark:border-slate-700 shadow-sm flex justify-between items-start">
+                            <div>
+                                <h4 class="font-bold dark:text-white">${emp.name}</h4>
+                                <p class="text-sm text-gray-500">${emp.position} - ${emp.baseSalary} ج.م</p>
+                            </div>
+                            <button onclick="window.deleteEmployee('${emp.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash-2" width="18"></i></button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            document.getElementById('save-emp').onclick = () => {
+                const name = document.getElementById('emp-name').value;
+                if (!name) return;
+                state.employees.push({
+                    id: Date.now().toString(),
+                    name,
+                    position: document.getElementById('emp-pos').value,
+                    baseSalary: Number(document.getElementById('emp-sal').value),
+                    status: 'ACTIVE'
+                });
+                saveData('employees_data_v3', state.employees);
+                renderPayroll(container);
+            };
+
+            window.deleteEmployee = (id) => {
+                if (confirm('هل أنت متأكد من حذف هذا الموظف؟')) {
+                    state.employees = state.employees.filter(e => e.id !== id);
+                    saveData('employees_data_v3', state.employees);
+                    renderPayroll(container);
+                }
+            };
+        }
+
+        // --- SETTINGS MODULE (WITH USER DELETE) ---
+        function renderSettings(container) {
+            const isOwner = state.currentUser.role === 'OWNER';
+            
+            const usersList = state.users.map(u => `
+                <tr class="border-b dark:border-slate-700">
+                    <td class="p-3">${u.name}</td>
+                    <td class="p-3 text-xs font-mono">${u.username}</td>
+                    <td class="p-3"><span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">${u.role}</span></td>
+                    <td class="p-3 text-center">
+                        ${u.id !== 'super-admin-01' ? 
+                            `<button onclick="window.deleteUser('${u.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash-2" width="16"></i></button>` 
+                            : '<span class="text-gray-400 text-xs"><i data-lucide="shield"></i></span>'}
+                    </td>
+                </tr>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-100 dark:border-slate-700">
+                        <h3 class="font-bold mb-4 dark:text-white">إعدادات عامة</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <input id="conf-name" value="${state.settings.name}" class="p-2 border rounded dark:bg-slate-700 dark:text-white">
+                            <button id="save-conf" class="bg-blue-600 text-white rounded">حفظ التغييرات</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-100 dark:border-slate-700">
+                        <div class="flex justify-between mb-4">
+                            <h3 class="font-bold dark:text-white">المستخدمين</h3>
+                            ${isOwner ? `<button id="toggle-new-user" class="text-sm bg-green-600 text-white px-3 py-1 rounded">إضافة مستخدم</button>` : ''}
+                        </div>
+                        
+                        <div id="new-user-section" class="hidden bg-gray-50 dark:bg-slate-900 p-4 rounded mb-4">
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <input id="nu-name" placeholder="الاسم" class="p-2 border rounded dark:bg-slate-700">
+                                <input id="nu-user" placeholder="User" class="p-2 border rounded dark:bg-slate-700">
+                                <input id="nu-pass" placeholder="Password" class="p-2 border rounded dark:bg-slate-700">
+                                <select id="nu-role" class="p-2 border rounded dark:bg-slate-700">
+                                    <option value="VIEWER">مشاهد</option>
+                                    <option value="SALES">كاشير</option>
+                                    <option value="ADMIN">مدير</option>
+                                </select>
+                            </div>
+                            <button id="save-new-user" class="w-full bg-blue-600 text-white py-1 rounded">إنشاء</button>
+                        </div>
+
+                        <table class="w-full text-right"><tbody class="dark:text-gray-300">${usersList}</tbody></table>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('save-conf').onclick = () => {
+                state.settings.name = document.getElementById('conf-name').value;
+                saveData('company_settings_v3', state.settings);
+                alert('تم الحفظ');
+            };
+
+            if (isOwner) {
+                document.getElementById('toggle-new-user').onclick = () => document.getElementById('new-user-section').classList.toggle('hidden');
+                document.getElementById('save-new-user').onclick = () => {
+                    const name = document.getElementById('nu-name').value;
+                    const username = document.getElementById('nu-user').value;
+                    const password = document.getElementById('nu-pass').value;
+                    
+                    if(name && username && password) {
+                        state.users.push({ 
+                            id: Date.now().toString(), 
+                            name, username, password, 
+                            role: document.getElementById('nu-role').value 
+                        });
+                        saveData('app_users_v3', state.users);
+                        renderSettings(container);
+                    }
+                };
+            }
+
+            window.deleteUser = (id) => {
+                if (id === 'super-admin-01') return;
+                if (confirm('حذف المستخدم؟')) {
+                    state.users = state.users.filter(u => u.id !== id);
+                    saveData('app_users_v3', state.users);
+                    renderSettings(container);
+                }
+            };
+        }
+
+        // Initialize App
+        renderApp();
+    </script>
+</body>
 </html>
