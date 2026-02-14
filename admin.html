@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaaS Admin Panel - Engaz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Cairo', sans-serif; }</style>
+    
+    <!-- Import Map for Firebase (Aligned with Main App) -->
+    <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
+      }
+    }
+    </script>
+</head>
+<body class="bg-gray-100">
+
+    <div id="login-layer" class="fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-lg shadow-lg w-96 text-center">
+            <h2 class="text-2xl font-bold mb-4">الدخول للوحة التحكم</h2>
+            <input type="password" id="admin-pass" class="w-full border p-2 rounded mb-4" placeholder="كلمة مرور الأدمن">
+            <button onclick="checkAdmin()" class="bg-blue-600 text-white px-4 py-2 rounded w-full">دخول</button>
+        </div>
+    </div>
+
+    <div id="main-layer" class="hidden p-6 max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">إدارة المشتركين (SaaS Panel)</h1>
+            <div class="flex gap-4">
+                <a href="/" class="text-blue-600 hover:underline">الذهاب للتطبيق</a>
+                <button onclick="location.reload()" class="text-red-600">تسجيل خروج</button>
+            </div>
+        </header>
+
+        <!-- Add New Subscriber -->
+        <div class="bg-white p-6 rounded-lg shadow mb-8">
+            <h2 class="text-xl font-bold mb-4 border-b pb-2">إضافة عميل جديد</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input id="new-email" type="email" placeholder="البريد الإلكتروني للعميل" class="border p-2 rounded">
+                <input id="new-password" type="text" placeholder="كلمة المرور المبدئية" class="border p-2 rounded">
+                <button id="add-btn" class="bg-green-600 text-white px-4 py-2 rounded">إنشاء حساب واشتراك</button>
+            </div>
+            <p id="add-msg" class="mt-2 text-sm"></p>
+        </div>
+
+        <!-- Subscribers List -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <table class="w-full text-right">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="p-4">البريد الإلكتروني</th>
+                        <th class="p-4">تاريخ الانتهاء</th>
+                        <th class="p-4">الحالة</th>
+                        <th class="p-4">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="subs-table" class="divide-y">
+                    <!-- Data will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "firebase/app";
+        import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
+        import { getFirestore, collection, setDoc, getDocs, doc, updateDoc } from "firebase/firestore";
+
+        // --- FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBZJYT8U392L9gJ2JNfP4sk2VCfpke7yo8",
+            authDomain: "my-store-manager-8697b.firebaseapp.com",
+            projectId: "my-store-manager-8697b",
+            storageBucket: "my-store-manager-8697b.firebasestorage.app",
+            messagingSenderId: "990849651692",
+            appId: "1:990849651692:web:f9a424276483258337a6c9",
+            measurementId: "G-KB2VEXMQQJ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Simple Client-Side Gate
+        window.checkAdmin = () => {
+            const pass = document.getElementById('admin-pass').value;
+            if(pass === 'admin123') { // Simple hardcoded password
+                document.getElementById('login-layer').classList.add('hidden');
+                document.getElementById('main-layer').classList.remove('hidden');
+                loadSubscribers();
+            } else {
+                alert('كلمة المرور خاطئة');
+            }
+        };
+
+        // Add Subscriber
+        document.getElementById('add-btn').onclick = async () => {
+            const email = document.getElementById('new-email').value;
+            const password = document.getElementById('new-password').value;
+            const msg = document.getElementById('add-msg');
+
+            if(!email || !password) return alert('أدخل البيانات');
+            msg.innerText = 'جاري الإنشاء...';
+
+            try {
+                // 1. Create Auth User
+                await createUserWithEmailAndPassword(auth, email, password); 
+                
+                // 2. Create Firestore Record for SaaS Logic (New Schema)
+                const nextYear = new Date();
+                nextYear.setFullYear(nextYear.getFullYear() + 1);
+
+                // IMPORTANT: Use setDoc with the email as the ID
+                await setDoc(doc(db, "users", email), {
+                    email: email,
+                    expiryDate: nextYear.toISOString().split('T')[0], // Field name: expiryDate
+                    isActive: true
+                });
+
+                msg.innerText = 'تم بنجاح! تم إنشاء الحساب. يمكنك الآن استخدام هذا البريد لتسجيل الدخول في التطبيق.';
+                msg.className = "mt-2 text-sm text-green-600";
+                
+                loadSubscribers();
+                
+                // Clear inputs
+                document.getElementById('new-email').value = '';
+                document.getElementById('new-password').value = '';
+
+            } catch (e) {
+                console.error(e);
+                if (e.code === 'auth/email-already-in-use') {
+                    msg.innerText = 'خطأ: هذا البريد الإلكتروني مسجل بالفعل. حاول ببريد آخر.';
+                } else {
+                    msg.innerText = 'خطأ: ' + e.message;
+                }
+                msg.className = "mt-2 text-sm text-red-600";
+            }
+        };
+
+        // Load Subscribers
+        async function loadSubscribers() {
+            const tbody = document.getElementById('subs-table');
+            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">جاري التحميل...</td></tr>';
+            
+            try {
+                const querySnapshot = await getDocs(collection(db, "users"));
+                let html = '';
+                
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    
+                    // Simple Date Comparison for UI
+                    const expiryDateStr = data.expiryDate;
+                    const today = new Date().toISOString().split('T')[0];
+                    const isExpired = expiryDateStr < today;
+                    
+                    html += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-4">${data.email}</td>
+                            <td class="p-4">
+                                ${data.expiryDate} 
+                                ${isExpired ? '<span class="text-red-500 font-bold text-xs">(منتهي)</span>' : ''}
+                            </td>
+                            <td class="p-4">
+                                <span class="px-2 py-1 rounded text-xs ${data.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                    ${data.isActive ? 'نشط' : 'محظور'}
+                                </span>
+                            </td>
+                            <td class="p-4 flex gap-2">
+                                <button onclick="window.renew('${docSnap.id}', 1)" class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs hover:bg-blue-200">+ شهر</button>
+                                <button onclick="window.renew('${docSnap.id}', 12)" class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs hover:bg-indigo-200">+ سنة</button>
+                                <button onclick="window.toggleBlock('${docSnap.id}', ${data.isActive})" class="border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-100">
+                                    ${data.isActive ? 'حظر' : 'تفعيل'}
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tbody.innerHTML = html || '<tr><td colspan="4" class="p-4 text-center">لا يوجد مشتركين</td></tr>';
+            } catch (e) {
+                console.error("Load subscribers error:", e);
+                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">
+                    لم نتمكن من عرض المشتركين. (قد تحتاج لتسجيل الدخول أو التحقق من قواعد البيانات)<br>
+                    <span class="text-xs text-gray-400">${e.message}</span>
+                </td></tr>`;
+            }
+        }
+
+        // Actions
+        window.renew = async (id, months) => {
+            try {
+                const docRef = doc(db, "users", id);
+                const newDate = new Date();
+                newDate.setMonth(newDate.getMonth() + months);
+                
+                await updateDoc(docRef, {
+                    expiryDate: newDate.toISOString().split('T')[0]
+                });
+                alert('تم التجديد');
+                loadSubscribers();
+            } catch(e) { console.error(e); }
+        };
+
+        window.toggleBlock = async (id, currentStatus) => {
+            try {
+                await updateDoc(doc(db, "users", id), {
+                    isActive: !currentStatus
+                });
+                loadSubscribers();
+            } catch(e) { console.error(e); }
+        };
+
+    </script>
+</body>
+</html>

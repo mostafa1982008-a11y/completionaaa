@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   OWNER = 'OWNER',       // مالك - كامل الصلاحيات
   ADMIN = 'ADMIN',       // مدير نظام
@@ -27,6 +28,7 @@ export interface User {
   role: UserRole;
   password?: string; 
   permissions?: string[];
+  email?: string; // Added for type safety with Firebase user object
 }
 
 export interface UserSession {
